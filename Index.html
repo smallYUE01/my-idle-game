@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <title>掛機抽卡升級遊戲</title>
+    <style>
+        body { font-family: sans-serif; background: #222; color: white; display: flex; flex-direction: column; align-items: center; }
+        #game-container { width: 90%; max-width: 500px; text-align: center; border: 2px solid #444; padding: 20px; border-radius: 15px; background: #333; margin-top: 50px; }
+        .card-slot { display: inline-block; margin: 10px; padding: 15px; border-radius: 8px; border: 2px solid #555; min-width: 100px; }
+        /* 階級顏色 */
+        .rank-0 { background: #eee; color: #333; } /* 白色 */
+        .rank-1 { background: #4caf50; color: white; } /* 綠色 */
+        .rank-2 { background: #2196f3; color: white; } /* 藍色 */
+        .rank-3 { background: #9c27b0; color: white; } /* 紫色 */
+        .rank-4 { background: #ff9800; color: white; } /* 橙色 */
+        .log { height: 150px; overflow-y: auto; background: #000; color: #0f0; padding: 10px; text-align: left; font-size: 12px; margin-top: 20px; border-radius: 5px; }
+    </style>
+</head>
+<body>
+
+<div id="game-container">
+    <h1>掛機抽卡大師</h1>
+    <div id="stats">目前擁有卡片總數: <span id="total-count">0</span></div>
+    <hr>
+    <div id="inventory-display">
+        </div>
+    <div class="log" id="game-log">遊戲開始...正在等待抽卡...</div>
+</div>
+
+<script>
+    const RARITIES = ["白色", "綠色", "藍色", "紫色", "橙色"];
+    // 玩家背包：key 是 "階級-等級"，value 是 數量
+    let inventory = {};
+
+    function addCard(rank, lv) {
+        const key = `${rank}-${lv}`;
+        inventory[key] = (inventory[key] || 0) + 1;
+        log(`獲得了 [${RARITIES[rank]} Lv.${lv}]`);
+        checkUpgrade(rank, lv);
+        updateUI();
+    }
+
+    function checkUpgrade(rank, lv) {
+        const key = `${rank}-${lv}`;
+        if (inventory[key] >= 10) {
+            inventory[key] -= 10;
+            
+            let nextLv = lv + 1;
+            let nextRank = rank;
+
+            if (nextLv > 10) {
+                nextLv = 1;
+                nextRank += 1;
+            }
+
+            if (nextRank < RARITIES.length) {
+                log(`<b style="color:yellow">合成成功！升級為 [${RARITIES[nextRank]} Lv.${nextLv}]</b>`);
+                addCard(nextRank, nextLv);
+            } else {
+                log(`恭喜！你已達到最高階級！`);
+            }
+        }
+    }
+
+    function log(msg) {
+        const logDiv = document.getElementById('game-log');
+        logDiv.innerHTML = msg + "<br>" + logDiv.innerHTML;
+    }
+
+    function updateUI() {
+        const container = document.getElementById('inventory-display');
+        const totalSpan = document.getElementById('total-count');
+        container.innerHTML = "";
+        let total = 0;
+
+        for (let r = 0; r < RARITIES.length; r++) {
+            for (let l = 1; l <= 10; l++) {
+                const count = inventory[`${r}-${l}`] || 0;
+                total += count;
+                if (count > 0) {
+                    container.innerHTML = `
+                        <div class="card-slot rank-${r}">
+                            ${RARITIES[r]} Lv.${l}<br>數量: ${count}
+                        </div>
+                    ` + container.innerHTML; // 最新的等級顯示在前面
+                }
+            }
+        }
+        totalSpan.innerText = total;
+    }
+
+    // 每 2 秒自動抽一張白色 Lv.1
+    setInterval(() => {
+        addCard(0, 1);
+    }, 2000);
+
+</script>
+</body>
+</html>
