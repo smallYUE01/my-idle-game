@@ -2,17 +2,16 @@
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <title>召喚聖索：未來戰場 v3.1</title>
+    <title>召喚聖索：未來戰場 v3.2</title>
     <style>
         body { font-family: 'Microsoft JhengHei', sans-serif; background: #121212; color: white; margin: 0; padding: 15px; display: flex; flex-direction: column; align-items: center; }
         .stats { background: #1e1e1e; width: 100%; max-width: 900px; padding: 15px; display: flex; justify-content: space-around; border-radius: 12px; margin-bottom: 15px; border: 1px solid #00d4ff; box-shadow: 0 0 10px rgba(0,212,255,0.2); }
         .container { display: flex; gap: 15px; width: 100%; max-width: 900px; height: 500px; }
         .zone { flex: 1; background: #252525; padding: 15px; border-radius: 12px; border: 1px solid #444; display: flex; flex-direction: column; overflow: hidden; }
         
-        /* 卡片顯示 */
         .inventory-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 10px; overflow-y: auto; flex-grow: 1; padding: 5px; }
-        .card-slot { padding: 10px; border-radius: 8px; text-align: center; font-size: 11px; border: 1px solid rgba(255,255,255,0.1); position: relative; }
-        .avatar { width: 60px; height: 60px; object-fit: cover; border-radius: 50%; border: 2px solid rgba(255,255,255,0.5); margin-bottom: 5px; background: #444; }
+        .card-slot { padding: 10px; border-radius: 8px; text-align: center; font-size: 11px; border: 1px solid rgba(255,255,255,0.1); }
+        .avatar { width: 50px; height: 50px; object-fit: cover; border-radius: 50%; background: #444; margin: 0 auto 5px; display: block; }
         
         .rank-0 { background: #e0e0e0; color: #222; }
         .rank-1 { background: #43a047; color: white; }
@@ -20,50 +19,40 @@
         .rank-3 { background: #8e24aa; color: white; }
         .rank-4 { background: #fb8c00; color: white; box-shadow: 0 0 8px gold; border: 1px solid gold; }
 
-        /* 怪物戰場 */
         .monster-list { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; overflow-y: auto; flex-grow: 1; padding: 5px; align-content: start; }
-        .monster { background: #333; padding: 8px; border-radius: 6px; border-left: 4px solid #f44336; font-size: 12px; text-align: center; }
-        .monster-img { width: 45px; height: 45px; object-fit: contain; margin-bottom: 5px; }
+        .monster { background: #333; padding: 8px; border-radius: 6px; border-left: 4px solid #f44336; font-size: 12px; text-align: center; min-height: 80px; }
+        .monster-img { width: 40px; height: 40px; object-fit: contain; margin: 0 auto 5px; display: block; background: #444; }
         .hp-bar { background: #000; height: 6px; width: 100%; border-radius: 3px; margin-top: 5px; }
-        .hp-fill { background: #ff5252; height: 100%; border-radius: 3px; transition: width 0.2s; }
+        .hp-fill { background: #ff5252; height: 100%; border-radius: 3px; }
 
-        /* 日誌面板 */
         .detail-panel { width: 100%; max-width: 900px; background: #1a1a1a; margin-top: 15px; border-radius: 12px; border: 1px solid #555; height: 150px; display: flex; flex-direction: column; }
-        .panel-header { background: #333; padding: 5px 15px; font-size: 13px; font-weight: bold; color: #aaa; border-radius: 12px 12px 0 0; }
         .log-content { flex-grow: 1; overflow-y: auto; padding: 10px; font-family: monospace; font-size: 12px; color: #00ff00; }
-        .log-item { margin-bottom: 4px; border-bottom: 1px solid #222; padding-bottom: 2px; }
     </style>
 </head>
 <body>
 
 <div class="stats">
-    <div>💰 金幣: <span id="gold" style="color:gold">0</span></div>
-    <div>⚔️ 總秒傷: <span id="dps" style="color:#ff5252">0</span></div>
-    <div>💀 總擊殺: <span id="kills" style="color:#00d4ff">0</span></div>
-    <div>🧬 哥布林階級: <span id="g-lv" style="color:#8bc34a">1</span></div>
+    <div>💰 金幣: <span id="gold">0</span></div>
+    <div>⚔️ 總秒傷: <span id="dps">0</span></div>
+    <div>💀 總擊殺: <span id="kills">0</span></div>
 </div>
 
 <div class="container">
     <div class="zone">
-        <h3 style="margin:0 0 10px 0; color:#00d4ff;">✨ 召喚聖索</h3>
+        <h3>✨ 召喚聖索</h3>
         <div id="inventory-display" class="inventory-grid"></div>
     </div>
-
     <div class="zone">
-        <h3 style="margin:0 0 10px 0; color:#ff5252;">🔥 未來戰場</h3>
+        <h3>🔥 未來戰場 (Lv.<span id="g-lv">1</span>)</h3>
         <div id="battle-field" class="monster-list"></div>
     </div>
 </div>
 
 <div class="detail-panel">
-    <div class="panel-header">系統訊息細項</div>
     <div id="game-log" class="log-content"></div>
 </div>
 
 <script>
-    const RARITIES = ["白色", "綠色", "藍色", "紫色", "橙色"];
-    
-    // 圖片路徑皆已加上 image/ 前綴
     const CHARACTERS = {
         "雷納": { startRank: 0, chance: 0.50, baseAtk: 1, grow: 1, img: "image/reyna.png" },
         "傑提": { startRank: 1, chance: 0.15, baseAtk: 20, grow: 2, img: "image/jett.png" },
@@ -73,65 +62,16 @@
     };
     const MONSTER_IMG = "image/goblin.png";
 
-    let data = JSON.parse(localStorage.getItem('sacred_field_save_v3')) || { inv: {}, gold: 0, kills: 0 };
+    let data = JSON.parse(localStorage.getItem('game_v3_2')) || { inv: {}, gold: 0, kills: 0 };
     let monsters = [];
 
     function addLog(msg, color = "#0f0") {
         const logBox = document.getElementById('game-log');
-        const item = document.createElement('div');
-        item.className = 'log-item';
-        item.style.color = color;
-        item.innerHTML = `[${new Date().toLocaleTimeString()}] ${msg}`;
-        logBox.prepend(item);
-        if (logBox.childNodes.length > 30) logBox.removeChild(logBox.lastChild);
-    }
-
-    function save() { localStorage.setItem('sacred_field_save_v3', JSON.stringify(data)); }
-
-    function getAtk(name, rank, lv) {
-        let c = CHARACTERS[name];
-        let atk = c.baseAtk + (lv - 1) * c.grow;
-        return atk * Math.pow(2, rank - c.startRank);
-    }
-
-    function drawCard() {
-        let roll = Math.random();
-        let current = 0;
-        for (let n in CHARACTERS) {
-            current += CHARACTERS[n].chance;
-            if (roll < current) { 
-                addCard(n, CHARACTERS[n].startRank, 1); 
-                addLog(`召喚成功: ${n} (${RARITIES[CHARACTERS[n].startRank]})`, "#fff");
-                return; 
-            }
-        }
-    }
-
-    function addCard(n, r, l) {
-        let key = `${n}-${r}-${l}`;
-        data.inv[key] = (data.inv[key] || 0) + 1;
-        if (data.inv[key] >= 10) {
-            data.inv[key] -= 10;
-            let nl = l + 1, nr = r;
-            if (nl > 10) { nl = 1; nr++; }
-            if (nr < 5) {
-                addLog(`✨ 合成進化！${n} 升至 [${RARITIES[nr]} Lv.${nl}]`, "yellow");
-                addCard(n, nr, nl);
-            }
-        }
-        updateUI();
-    }
-
-    function spawn() {
-        if (monsters.length < 10) {
-            let gLv = Math.floor(data.kills / 100);
-            let mult = Math.pow(2, gLv);
-            monsters.push({ hp: 10 * mult, max: 10 * mult, gold: 1 * mult });
-        }
+        logBox.innerHTML = `<div>[${new Date().toLocaleTimeString()}] ${msg}</div>` + logBox.innerHTML;
     }
 
     function updateUI() {
-        save();
+        localStorage.setItem('game_v3_2', JSON.stringify(data));
         document.getElementById('gold').innerText = Math.floor(data.gold).toLocaleString();
         document.getElementById('kills').innerText = data.kills;
         document.getElementById('g-lv').innerText = Math.floor(data.kills / 100) + 1;
@@ -141,52 +81,70 @@
         for (let k in data.inv) {
             if (data.inv[k] <= 0) continue;
             let [n, r, l] = k.split('-');
-            let a = getAtk(n, parseInt(r), parseInt(l));
-            dps += a * data.inv[k];
-            html += `
-                <div class="card-slot rank-${r}">
-                    <img src="${CHARACTERS[n].img}" class="avatar" alt="${n}">
-                    <br><b>${n}</b><br>
-                    Lv.${l}<br>
-                    ⚔️${Math.floor(a)}<br>
-                    x${data.inv[k]}
-                </div>`;
+            let c = CHARACTERS[n];
+            let atk = (c.baseAtk + (l - 1) * c.grow) * Math.pow(2, r - c.startRank);
+            dps += atk * data.inv[k];
+            html += `<div class="card-slot rank-${r}">
+                <img src="${c.img}" class="avatar" alt="${n}">
+                <b>${n}</b><br>Lv.${l}<br>⚔️${Math.floor(atk)}<br>x${data.inv[k]}
+            </div>`;
         }
         document.getElementById('dps').innerText = Math.floor(dps).toLocaleString();
         document.getElementById('inventory-display').innerHTML = html;
         window.currentDPS = dps;
     }
 
-    // 每一秒鐘執行的核心循環
     setInterval(() => {
-        drawCard();
-        spawn(); 
+        // 抽卡邏輯
+        let roll = Math.random();
+        let cur = 0;
+        for (let n in CHARACTERS) {
+            cur += CHARACTERS[n].chance;
+            if (roll < cur) {
+                let key = `${n}-${CHARACTERS[n].startRank}-1`;
+                data.inv[key] = (data.inv[key] || 0) + 1;
+                // 自動合成
+                if (data.inv[key] >= 10) {
+                    data.inv[key] -= 10;
+                    let nextL = 2, nextR = CHARACTERS[n].startRank;
+                    let nextKey = `${n}-${nextR}-${nextL}`;
+                    data.inv[nextKey] = (data.inv[nextKey] || 0) + 1;
+                    addLog(`✨ ${n} 合成成功！`, "yellow");
+                }
+                break;
+            }
+        }
+
+        // 生成怪物
+        if (monsters.length < 10) {
+            let mult = Math.pow(2, Math.floor(data.kills / 100));
+            monsters.push({ hp: 10 * mult, max: 10 * mult, gold: 1 * mult });
+        }
         
+        // 戰鬥邏輯
         if (monsters.length > 0 && window.currentDPS > 0) {
             monsters[0].hp -= window.currentDPS;
             if (monsters[0].hp <= 0) {
                 let m = monsters.shift();
                 data.gold += m.gold;
                 data.kills++;
-                addLog(`擊殺哥布林！獲得 💰${m.gold.toLocaleString()}`, "gold");
+                addLog(`💀 擊殺怪物獲得 ${m.gold}`, "gold");
             }
         }
         
+        // 渲染戰場
         let mHtml = "";
         monsters.forEach((m, idx) => {
-            let percent = (m.hp / m.max) * 100;
-            mHtml += `
-                <div class="monster">
-                    <img src="${MONSTER_IMG}" class="monster-img" alt="goblin"><br>
-                    ${idx === 0 ? "🎯 " : ""}哥布林
-                    <div class="hp-bar"><div class="hp-fill" style="width:${percent}%"></div></div>
-                </div>`;
+            let p = (m.hp / m.max) * 100;
+            mHtml += `<div class="monster">
+                <img src="${MONSTER_IMG}" class="monster-img" alt="G">
+                ${idx === 0 ? "🎯" : ""}哥布林
+                <div class="hp-bar"><div class="hp-fill" style="width:${p}%"></div></div>
+            </div>`;
         });
         document.getElementById('battle-field').innerHTML = mHtml;
         updateUI();
     }, 1000);
-
-    updateUI();
 </script>
 </body>
 </html>
