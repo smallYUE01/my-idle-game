@@ -1,106 +1,232 @@
-const RARITIES = ["白色", "綠色", "藍色", "紫色", "橙色"];
-const CHARACTERS = {
-    "雷納": { startRank: 0, chance: 0.75 },    // 75% 初始白卡
-    "傑提": { startRank: 1, chance: 0.15 },    // 15% 初始綠卡
-    "瑞茲": { startRank: 2, chance: 0.05 },    // 5%  初始藍卡
-    "霓虹": { startRank: 3, chance: 0.01 },    // 1%  初始紫卡
-    "離所": { startRank: 4, chance: 0.001 }   // 0.1% 初始橙卡
-};
-
-// 玩家背包：key 為 "角色名-階級-等級"
-let inventory = JSON.parse(localStorage.getItem('idleGameSave')) || {};
-
-function saveGame() {
-    localStorage.setItem('idleGameSave', JSON.stringify(inventory));
-}
-
-// 抽卡邏輯
-function drawCard() {
-    const roll = Math.random(); // 產生 0~1 之間的隨機數
-    let cumulativeChance = 0;
-    let found = false;
-
-    for (let name in CHARACTERS) {
-        cumulativeChance += CHARACTERS[name].chance;
-        if (roll < cumulativeChance) {
-            // 抽中該角色
-            addCard(name, CHARACTERS[name].startRank, 1);
-            found = true;
-            break;
-        }
-    }
-
-    if (!found) {
-        log(`<span style="color:#666">抽卡失敗... (沒抽中任何角色)</span>`);
-    }
-}
-
-function addCard(name, rank, lv) {
-    const key = `${name}-${rank}-${lv}`;
-    inventory[key] = (inventory[key] || 0) + 1;
-    
-    // 根據階級顏色顯示日誌
-    const colorStyle = `class="rank-${rank}" style="padding:2px 5px; border-radius:3px"`;
-    log(`獲得了 <span ${colorStyle}>${name} [${RARITIES[rank]} Lv.${lv}]</span>`);
-    
-    checkUpgrade(name, rank, lv);
-    updateUI();
-    saveGame();
-}
-
-function checkUpgrade(name, rank, lv) {
-    const key = `${name}-${rank}-${lv}`;
-    if (inventory[key] >= 10) {
-        inventory[key] -= 10;
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <title>召喚聖索：未來戰場</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #1a1a1a; color: white; margin: 0; display: flex; flex-direction: column; align-items: center; }
+        .layout { display: flex; width: 95%; max-width: 1200px; gap: 20px; margin-top: 20px; }
         
-        let nextLv = lv + 1;
-        let nextRank = rank;
+        /* 區域樣式 */
+        .section { background: #2d2d2d; border-radius: 15px; padding: 20px; flex: 1; border: 1px solid #444; }
+        h2 { border-bottom: 2px solid #555; padding-bottom: 10px; margin-top: 0; color: #00d4ff; }
 
-        if (nextLv > 10) {
-            nextLv = 1;
-            nextRank += 1;
+        /* 統計數據 */
+        .stats-bar { width: 100%; background: #333; padding: 10px; display: flex; justify-content: center; gap: 30px; font-size: 1.2em; border-bottom: 3px solid #00d4ff; }
+        .gold { color: #ffd700; font-weight: bold; }
+        .dps { color: #ff4d4d; font-weight: bold; }
+
+        /* 卡片樣式 */
+        .inventory-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 10px; height: 400px; overflow-y: auto; }
+        .card-slot { padding: 10px; border-radius: 8px; text-align: center; font-size: 12px; transition: transform 0.2s; }
+        .card-slot b { font-size: 14px; display: block; }
+        .rank-0 { background: linear-gradient(135deg, #bbb, #eee); color: #222; }
+        .rank-1 { background: linear-gradient(135deg, #2e7d32, #81c784); color: white; }
+        .rank-2 { background: linear-gradient(135deg, #1565c0, #64b5f6); color: white; }
+        .rank-3 { background: linear-gradient(135deg, #6a1b9a, #ba68c8); color: white; }
+        .rank-4 { background: linear-gradient(135deg, #ef6c00, #ffb74d); color: white; border: 2px solid gold; }
+
+        /* 戰場樣式 */
+        .monster-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin-top: 10px; }
+        .goblin { background: #4e5d32; border: 1px solid #8bc34a; border-radius: 5px; padding: 5px; text-align: center; font-size: 12px; }
+        .hp-bar { background: #222; height: 5px; width: 100%; margin-top: 5px; }
+        .hp-fill { background: #ff4d4d; height: 100%; width: 100%; }
+
+        .log { height: 100px; overflow-y: auto; background: #000; color: #0f0; padding: 10px; font-size: 12px; border-radius: 5px; margin-top: 10px; }
+    </style>
+</head>
+<body>
+
+<div class="stats-bar">
+    <span>💰 金幣: <span id="gold-count" class="gold">0</span></span>
+    <span>⚔️ 總秒傷 (DPS): <span id="total-dps" class="dps">0</span></span>
+    <span>🏆 總擊殺: <span id="total-kills">0</span></span>
+</div>
+
+<div class="layout">
+    <div class="section">
+        <h2>召喚聖索</h2>
+        <div class="inventory-grid" id="inventory-display"></div>
+        <div class="log" id="game-log">正在初始化召喚陣...</div>
+    </div>
+
+    <div class="section">
+        <h2>未來戰場</h2>
+        <div id="monster-status">哥布林等級: Lv.<span id="goblin-lv">1</span></div>
+        <div class="monster-grid" id="battle-field">
+            </div>
+    </div>
+</div>
+
+<script>
+    // --- 遊戲設定 ---
+    const RARITIES = ["白色", "綠色", "藍色", "紫色", "橙色"];
+    const CHARACTERS = {
+        "雷納": { startRank: 0, chance: 0.50, baseAtk: 1, grow: 1 },
+        "傑提": { startRank: 1, chance: 0.15, baseAtk: 20, grow: 2 },
+        "瑞茲": { startRank: 2, chance: 0.05, baseAtk: 50, grow: 5 },
+        "霓虹": { startRank: 3, chance: 0.01, baseAtk: 100, grow: 10 },
+        "離所": { startRank: 4, chance: 0.001, baseAtk: 500, grow: 50 }
+    };
+
+    // --- 玩家資料 ---
+    let gameState = JSON.parse(localStorage.getItem('sacredSorrowSave')) || {
+        inventory: {},
+        gold: 0,
+        kills: 0
+    };
+
+    let monsters = []; // 戰場上的哥布林
+
+    // --- 邏輯函數 ---
+
+    function save() {
+        localStorage.setItem('sacredSorrowSave', JSON.stringify(gameState));
+    }
+
+    function calculateCardAtk(name, rank, lv) {
+        const config = CHARACTERS[name];
+        // 基礎攻擊 + 等級加成
+        let atk = config.baseAtk + (lv - 1) * config.grow;
+        // 階級翻倍邏輯：每升一階傷害翻倍 (相對於初始階級)
+        let rankDiff = rank - config.startRank;
+        if (rankDiff > 0) {
+            atk = atk * Math.pow(2, rankDiff);
         }
+        return atk;
+    }
 
-        if (nextRank < RARITIES.length) {
-            log(`<b style="color:yellow">★ 合成成功！${name} 進化為 [${RARITIES[nextRank]} Lv.${nextLv}]</b>`);
-            addCard(name, nextRank, nextLv);
-        } else {
-            log(`<b style="color:gold">👑 恭喜！${name} 已達到最高階級！</b>`);
+    function drawCard() {
+        const roll = Math.random();
+        let cumulativeChance = 0;
+        for (let name in CHARACTERS) {
+            cumulativeChance += CHARACTERS[name].chance;
+            if (roll < cumulativeChance) {
+                addCard(name, CHARACTERS[name].startRank, 1);
+                return;
+            }
+        }
+        log(`<span style="color:#666">召喚失敗...</span>`);
+    }
+
+    function addCard(name, rank, lv) {
+        const key = `${name}-${rank}-${lv}`;
+        gameState.inventory[key] = (gameState.inventory[key] || 0) + 1;
+        checkUpgrade(name, rank, lv);
+        updateUI();
+        save();
+    }
+
+    function checkUpgrade(name, rank, lv) {
+        const key = `${name}-${rank}-${lv}`;
+        if (gameState.inventory[key] >= 10) {
+            gameState.inventory[key] -= 10;
+            let nextLv = lv + 1;
+            let nextRank = rank;
+            if (nextLv > 10) { nextLv = 1; nextRank += 1; }
+            
+            if (nextRank < RARITIES.length) {
+                log(`<b style="color:yellow">合成成功：${name} [${RARITIES[nextRank]} Lv.${nextLv}]</b>`);
+                addCard(name, nextRank, nextLv);
+            }
         }
     }
-}
 
-function log(msg) {
-    const logDiv = document.getElementById('game-log');
-    logDiv.innerHTML = msg + "<br>" + logDiv.innerHTML;
-}
+    // --- 戰鬥系統 ---
 
-function updateUI() {
-    const container = document.getElementById('inventory-display');
-    const totalSpan = document.getElementById('total-count');
-    container.innerHTML = "";
-    let total = 0;
+    function spawnGoblin() {
+        if (monsters.length < 10) {
+            let lv = Math.floor(gameState.kills / 100);
+            let multiplier = Math.pow(2, lv);
+            monsters.push({
+                maxHp: 10 * multiplier,
+                hp: 10 * multiplier,
+                gold: 1 * multiplier
+            });
+            updateBattleUI();
+        }
+    }
 
-    // 遍歷所有背包物件
-    for (let key in inventory) {
-        const count = inventory[key];
-        if (count > 0) {
-            total += count;
-            const [name, rank, lv] = key.split('-');
-            container.innerHTML = `
-                <div class="card-slot rank-${rank}">
-                    <b>${name}</b><br>
-                    ${RARITIES[rank]} Lv.${lv}<br>
-                    數量: ${count}
+    function battleTick() {
+        // 計算總 DPS
+        let totalDps = 0;
+        for (let key in gameState.inventory) {
+            const count = gameState.inventory[key];
+            if (count > 0) {
+                const [name, rank, lv] = key.split('-');
+                totalDps += calculateCardAtk(name, parseInt(rank), parseInt(lv)) * count;
+            }
+        }
+        document.getElementById('total-dps').innerText = totalDps;
+
+        // 攻擊第一隻哥布林
+        if (monsters.length > 0 && totalDps > 0) {
+            monsters[0].hp -= totalDps;
+            if (monsters[0].hp <= 0) {
+                let m = monsters.shift();
+                gameState.gold += m.gold;
+                gameState.kills += 1;
+                log(`<span style="color:gold">擊殺哥布林！獲得 ${m.gold} 金幣</span>`);
+            }
+            updateBattleUI();
+            updateUI();
+            save();
+        }
+    }
+
+    // --- UI 更新 ---
+
+    function log(msg) {
+        const logDiv = document.getElementById('game-log');
+        logDiv.innerHTML = msg + "<br>" + logDiv.innerHTML;
+        if(logDiv.childNodes.length > 20) logDiv.removeChild(logDiv.lastChild);
+    }
+
+    function updateUI() {
+        document.getElementById('gold-count').innerText = gameState.gold;
+        document.getElementById('total-kills').innerText = gameState.kills;
+        document.getElementById('goblin-lv').innerText = Math.floor(gameState.kills / 100) + 1;
+
+        const inv = document.getElementById('inventory-display');
+        inv.innerHTML = "";
+        for (let key in gameState.inventory) {
+            const count = gameState.inventory[key];
+            if (count > 0) {
+                const [name, rank, lv] = key.split('-');
+                const atk = calculateCardAtk(name, parseInt(rank), parseInt(lv));
+                inv.innerHTML = `
+                    <div class="card-slot rank-${rank}">
+                        <b>${name}</b>
+                        ${RARITIES[rank]} Lv.${lv}<br>
+                        ⚔️ ${atk}<br>
+                        (持有: ${count})
+                    </div>
+                ` + inv.innerHTML;
+            }
+        }
+    }
+
+    function updateBattleUI() {
+        const field = document.getElementById('battle-field');
+        field.innerHTML = "";
+        monsters.forEach(m => {
+            let percent = (m.hp / m.maxHp) * 100;
+            field.innerHTML += `
+                <div class="goblin">
+                    👺 哥布林
+                    <div class="hp-bar"><div class="hp-fill" style="width:${percent}%"></div></div>
+                    <small>${Math.ceil(m.hp)} / ${m.maxHp}</small>
                 </div>
-            ` + container.innerHTML;
-        }
+            `;
+        });
     }
-    totalSpan.innerText = total;
-}
 
-// 初始化
-updateUI();
+    // --- 定時器 ---
+    setInterval(drawCard, 1000);    // 每秒抽卡
+    setInterval(spawnGoblin, 10000); // 10秒生哥布林
+    setInterval(battleTick, 1000);   // 每秒戰鬥判定
 
-// 每 2 秒自動抽卡一次
-setInterval(drawCard, 2000);
+    updateUI();
+</script>
+</body>
+</html>
